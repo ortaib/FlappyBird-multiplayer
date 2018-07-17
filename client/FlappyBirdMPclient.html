@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+  <head>
+  	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.1.0/socket.io.dev.js"> 
+    </script>
+    <title>Flappy Bird MP</title>
+    <style type="text/css">
+      canvas{
+        display:block;
+        position: absolute;
+        margin: auto;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        right: 0;
+      }
+      h3{
+        text-align: center;
+      }
+    </style>
+  </head>
+
+  <body>
+   <h3>Flappy Bird Multiplayer</h3>
+   
+   <canvas id="canvas" width="320" height="512" ></canvas>
+
+   <script type="text/javascript">
+   	var cvs = document.getElementById("canvas");
+   	var ctx = cvs.getContext("2d"); 
+   	ctx.font = "30px Arial";
+    var keepscore=0;
+    var digits = [];
+    var medals = [];
+    var smallDigits = [];
+    var birds = [];
+   	var states = {
+		Splash : 0 , Game: 1, Score: 2, Wait: 3
+	};
+   	var mybird;
+    var okbtn = {x:120,y:302,width:82,height:28};
+   	var players =[];
+    var countdown;
+    var rdyPlayers=0;
+   	var playersbirds = [];
+   	var pipes =[];
+    var flySound,scoreSound;
+   	var bg,
+        ok,
+   		  rdy,
+        arrow,
+        gameOver,
+        fg,
+        pipeNorth,
+        pipeSouth,
+        frames=0,
+        fgpos=0,
+        currentState,
+        splash,
+        scoreboard;
+	document.addEventListener("click",function(evt){
+        if(mybird.state ===states.Score && currentState===states.Score){
+          var mx = evt.offsetX, my = evt.offsetY;
+          if(okbtn.x < mx && mx < okbtn.x+okbtn.width && okbtn.y <my && my < okbtn.y+okbtn.width){
+              socket.emit("clicked",{});
+          }
+        }
+      	else{
+          socket.emit("clicked",{});
+        }
+    });    	
+    var socket = io();
+    socket.on("loadGame",loadGame);
+    socket.on("update",update);
+
+
+    function loadGame(data){
+      console.log("loading game");
+      cvs.style.border = "1px solid black";
+      birds["red"] = [new Image(),new Image(),new Image()];
+      birds["yellow"] = [new Image(),new Image(),new Image()];
+      birds["blue"] = [new Image(),new Image(),new Image()];
+      digits = [new Image(),new Image(),new Image(),new Image()];
+      smallDigits = [new Image(),new Image(),new Image(),new Image(),new Image(),new Image(),new Image(),new Image(),
+      new Image(),new Image()];
+      medals = [new Image(),new Image(),new Image()];
+      splash = new Image();
+      bg = new Image();
+      fg =  new Image();
+      arrow = new Image();
+      gameOver = new Image();
+      pipeNorth = new Image();
+      pipeSouth = new Image();
+      flySound = new Audio();
+      scoreSound = new Audio();
+      rdy = new Image();
+      ok = new Image();
+      scoreboard = new Image();
+      scoreSound.src = "/client/sounds/score.mp3";
+      flySound.src = "/client/sounds/fly.mp3";
+      birds["red"][0].src ="/client/images/redbird-upflap.png"; 
+      birds["red"][1].src ="/client/images/redbird-midflap.png"; 
+      birds["red"][2].src ="/client/images/redbird-downflap.png"; 
+      birds["blue"][0].src ="/client/images/bluebird-upflap.png"; 
+      birds["blue"][1].src ="/client/images/bluebird-midflap.png"; 
+      birds["blue"][2].src ="/client/images/bluebird-downflap.png"; 
+      birds["yellow"][0].src ="/client/images/yellowbird-upflap.png"; 
+      birds["yellow"][1].src ="/client/images/yellowbird-midflap.png"; 
+      birds["yellow"][2].src ="/client/images/yellowbird-downflap.png";
+      for (var i = 0; i < smallDigits.length; i++) {
+          smallDigits[i].src = "/client/images/"+i+".png";
+      }
+      arrow.src = "/client/images/arrow.png";
+      medals[0].src = "/client/images/bronze.png";
+      medals[1].src = "/client/images/silver.png";
+      medals[2].src = "/client/images/gold.png";
+      ok.src = "/client/images/ok.png";
+      gameOver.src = "/client/images/gameover.png";
+      digits[0].src = "/client/images/0big.png";
+      digits[1].src = "/client/images/1big.png";
+      digits[2].src = "/client/images/2big.png";
+      digits[3].src = "/client/images/3big.png";
+      bg.src = "/client/images/bg.png";
+      fg.src = "/client/images/fg.png";
+      pipeNorth.src = "/client/images/pipeNorth.png"; 
+      pipeSouth.src = "/client/images/pipeSouth.png";
+      scoreboard.src = "/client/images/scoreboard.png";
+      rdy.src = "/client/images/ready.png";
+      splash.src = "/client/images/splash.png";
+      mybird = data.yourbird;
+      players = data.players;
+      fgpos = data.fgpos;
+      frames = data.frames;
+      currentState = data.currentState;
+      splash.onload = waitingRoom;
+    }
+    function update(data){
+      mybird = data.yourbird;
+      players = data.players;
+      fgpos = data.fgpos;
+      countdown = data.countdown;
+      frames = data.frames;
+      rdyPlayers=data.rdy;
+      currentState = data.currentState;
+      pipes = data.pipes;
+      if(mybird.state === states.Splash || mybird.state === states.Wait){
+      	waitingRoom();
+      }
+      else if(currentState === states.Game){
+        gameRoom();
+      }
+      else if(currentState === states.Score && mybird.state === states.Score){
+        scoreRoom();
+      }
+    }
+    function scoreRoom(){
+        ctx.drawImage(bg,0,0);
+        ctx.drawImage(bg,bg.width,0);
+        for(var i=0;i<players.length;i++){
+            if(players[i].state === states.Score){
+              drawBird(players[i]);
+          }
+        }
+        drawBird(mybird);
+        drawPipes();
+        ctx.drawImage(fg,fgpos,cvs.height-fg.height+6);
+        ctx.drawImage(fg,fgpos+fg.width,cvs.height-fg.height+6);
+        ctx.drawImage(scoreboard,0,0,scoreboard.width,scoreboard.height,cvs.width/2 - (scoreboard.width/2),
+        cvs.height/2-scoreboard.height/2,scoreboard.width,scoreboard.height);
+        drawScore((cvs.width/2-scoreboard.width/2)+scoreboard.width*0.75,(cvs.height/2-scoreboard.height/2)
+          +scoreboard.height*0.37,mybird.score,mybird.best);
+        drawBest((cvs.width/2-scoreboard.width/2)+scoreboard.width*0.75 +5,(cvs.height/2-scoreboard.height/2)
+          +scoreboard.height*0.37+40,mybird.best);
+        drawScore(mybird.x,20,mybird.score);
+        for(var i=0;i<players.length;i++){
+          drawScore(players[i].x,20,players[i].score);
+        }
+        ctx.drawImage(arrow,mybird.x-4,0);
+        ctx.drawImage(medals[mybird.medal],(cvs.width/2-scoreboard.width/2)+scoreboard.width*0.135,
+          (cvs.height/2-scoreboard.height/2)+scoreboard.height*0.405);
+        ctx.drawImage(ok,0,0,ok.width,ok.height,okbtn.x,okbtn.y,okbtn.width,okbtn.height);
+
+
+    }
+    function gameRoom(){
+        ctx.drawImage(bg,0,0);
+        ctx.drawImage(bg,bg.width,0);
+        
+        drawPipes();
+        drawScore(mybird.x,20,mybird.score);
+        for(var i=0;i<players.length;i++){
+          drawScore(players[i].x,20,players[i].score);
+        }
+        for(var i=0;i<players.length;i++){
+          if(players[i].state===states.Game || players[i].state ===states.Score)
+            drawBird(players[i],false);
+        }
+        drawBird(mybird,true);
+        ctx.drawImage(arrow,mybird.x-4,0);
+        ctx.drawImage(fg,fgpos,cvs.height-fg.height+6);
+        ctx.drawImage(fg,fgpos+fg.width,cvs.height-fg.height+6);
+        if(mybird.state === states.Score){
+          ctx.drawImage(gameOver,cvs.width/2 - gameOver.width/2,cvs.height/2-gameOver.height/2);
+        }
+        if(mybird.velocity == -(mybird._jump-mybird.gravity)){
+          flySound.play();
+        }
+        if(keepscore<mybird.score){
+          scoreSound.play();
+        }
+        keepscore = mybird.score;
+      }
+
+    function waitingRoom(){
+    	  ctx.drawImage(bg,0,0);
+        ctx.drawImage(bg,bg.width,0);
+        ctx.drawImage(fg,fgpos,cvs.height-fg.height+6);
+        ctx.drawImage(fg,fgpos+fg.width,cvs.height-fg.height+6);
+        if(mybird.state === states.Splash){
+        	ctx.drawImage(splash,cvs.width/2   - splash.width/2,cvs.height/2.5   - splash.height/2);
+    	}
+    	if(mybird.state === states.Wait){
+    		for(var i=0;i<players.length;i++){
+    			if(players[i].state===states.Wait)
+    				drawBird(players[i],false);
+    		}
+    	}
+      drawBird(mybird,true)
+      if(mybird.state === states.Wait){
+        if(countdown.count === false){
+      	   ctx.drawImage(rdy,cvs.width/2   - rdy.width/2,cvs.height/2.5   - rdy.height/2);
+      	   var text = "Waiting for "+(3-rdyPlayers)+" players";
+       	   ctx.fillText(text,20,50);
+         }
+         else{
+            ctx.drawImage(digits[countdown.digit],cvs.width/2-digits[countdown.digit].width/2,cvs.height/2-digits[countdown.digit].height/2 -100);
+         }
+      }
+    }
+    //
+    function drawBird(bird,ismyBird){
+    ctx.save();
+		ctx.translate(bird.x,bird.y);
+		ctx.rotate(bird.rotation);
+		ctx.beginPath();
+		ctx.arc(0,0,bird.radius,0,2*Math.PI);
+		ctx.stroke();
+		n=bird.animation[bird.frame];
+    ctx.drawImage(birds[bird.color][n],0,0,birds[bird.color][n].width,birds[bird.color][n].height,
+      -birds[bird.color][n].width/2,-birds[bird.color][n].height/2,birds[bird.color][n].width,
+      birds[bird.color][n].height);
+		ctx.restore();
+    if(ismyBird == true)
+        ctx.drawImage(arrow,bird.x - birds[bird.color][n].width/2+8,bird.y-birds[bird.color][n].height*2)
+    }
+    function drawPipes(){
+  		for (var i = 0,len=pipes._pipes.length; i < len; i++) {
+  			var p = pipes._pipes[i];
+  			ctx.drawImage(pipeNorth,p.x,p.y);
+  			ctx.drawImage(pipeSouth,p.x,p.y+80+p.height);
+
+  		}
+    }
+    function drawScore(x,y,score){
+      score = score.toString();
+      for(var i=0;i<score.length;i++){
+        var n = parseInt(score[i]);
+        ctx.drawImage(smallDigits[n],x,y);
+        x+=smallDigits[0].width;
+      }
+    }
+    function drawBest(x,y,best){
+        best = best.toString();
+        for(var i=0;i<best.length;i++){
+          var n = parseInt(best[i]);
+          ctx.drawImage(smallDigits[n],x,y);
+          x+=smallDigits[0].width;
+        }
+        keepscore=0;
+    }
+    </script>
+  </body>
+</html>
